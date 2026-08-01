@@ -2,15 +2,25 @@
 import telebot
 import requests
 import time
-import json
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g1kEJNlsE"
 
 bot = telebot.TeleBot(TOKEN)
 
+# ===== دکمه‌های شیشه‌ای =====
+def main_menu():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn1 = KeyboardButton("📊 سیگنال")
+    btn2 = KeyboardButton("🏆 برتر")
+    btn3 = KeyboardButton("📈 اختیار")
+    btn4 = KeyboardButton("📚 راهنما")
+    markup.add(btn1, btn2, btn3, btn4)
+    return markup
+
+# ===== دریافت داده از بورس =====
 def get_market_data():
     try:
-        # دریافت داده از سایت بورس
         url = "http://cdn.tsetmc.com/api/ClosePrice/Market/GetAllClosingPrice/0"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -46,6 +56,7 @@ def get_market_data():
         print(f"خطا: {e}")
         return None
 
+# ===== سیگنال‌ها =====
 def generate_signals(stocks):
     signals = []
     if not stocks:
@@ -73,19 +84,18 @@ def generate_signals(stocks):
     signals = sorted(signals, key=lambda x: x['تغییر'], reverse=True)
     return signals[:10]
 
+# ===== دستورات ربات =====
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, 
         "🤖 **ربات سیگنال بورس**\n\n"
-        "📊 دستورات:\n"
-        "/سيگنال - دریافت سیگنال‌های خرید\n"
-        "/برتر - نمایش ۵ سهام پرمعامله\n"
-        "/اختیار - نمایش اختیارهای خرید\n"
-        "/راهنما - راهنمای کامل"
+        "👋 خوش آمدید!\n"
+        "از دکمه‌های زیر برای دریافت اطلاعات استفاده کنید:",
+        reply_markup=main_menu()
     )
 
-@bot.message_handler(commands=['سيگنال'])
-def get_signals(message):
+@bot.message_handler(func=lambda message: message.text == "📊 سیگنال")
+def handle_signals(message):
     msg = bot.reply_to(message, "🔄 در حال دریافت داده‌ها...")
     
     stocks = get_market_data()
@@ -105,10 +115,10 @@ def get_signals(message):
         response += f"   تغییر: {s['تغییر']:+,.2f}%\n"
         response += f"   حجم: {s['حجم']:,.0f}\n\n"
     
-    bot.edit_message_text(response, msg.chat.id, msg.message_id)
+    bot.edit_message_text(response, msg.chat.id, msg.message_id, reply_markup=main_menu())
 
-@bot.message_handler(commands=['برتر'])
-def get_top(message):
+@bot.message_handler(func=lambda message: message.text == "🏆 برتر")
+def handle_top(message):
     msg = bot.reply_to(message, "🔄 در حال دریافت داده‌ها...")
     
     stocks = get_market_data()
@@ -123,12 +133,12 @@ def get_top(message):
             response += f"• {item['نماد']}\n"
             response += f"  قیمت: {item['قیمت']:,.0f} تومان\n"
             response += f"  حجم: {item['حجم']:,.0f}\n\n"
-        bot.edit_message_text(response, msg.chat.id, msg.message_id)
+        bot.edit_message_text(response, msg.chat.id, msg.message_id, reply_markup=main_menu())
     except Exception as e:
-        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id, reply_markup=main_menu())
 
-@bot.message_handler(commands=['اختیار'])
-def get_options(message):
+@bot.message_handler(func=lambda message: message.text == "📈 اختیار")
+def handle_options(message):
     msg = bot.reply_to(message, "🔄 در حال جستجوی اختیارها...")
     
     stocks = get_market_data()
@@ -149,25 +159,27 @@ def get_options(message):
             response += f"  قیمت: {item['قیمت']:,.0f} تومان\n"
             response += f"  تغییر: {item['تغییر']:+,.2f}%\n"
             response += f"  حجم: {item['حجم']:,.0f}\n\n"
-        bot.edit_message_text(response, msg.chat.id, msg.message_id)
+        bot.edit_message_text(response, msg.chat.id, msg.message_id, reply_markup=main_menu())
     except Exception as e:
-        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id, reply_markup=main_menu())
 
-@bot.message_handler(commands=['راهنما'])
-def send_help(message):
+@bot.message_handler(func=lambda message: message.text == "📚 راهنما")
+def handle_help(message):
     bot.reply_to(message,
         "📚 **راهنما:**\n\n"
         "🔍 معیارهای سیگنال خرید:\n"
         "• حجم معاملات بالای ۵ میلیارد تومان\n"
         "• تغییر قیمت مثبت\n\n"
         "📋 **دستورات:**\n"
-        "/سيگنال - دریافت سیگنال‌های خرید\n"
-        "/برتر - ۵ سهام پرمعامله\n"
-        "/اختیار - اختیارهای خرید\n"
-        "/راهنما - این راهنما\n\n"
-        "⚠️ **توجه:** سیگنال‌ها فقط اطلاع‌رسانی هستند."
+        "📊 سیگنال - دریافت سیگنال‌های خرید\n"
+        "🏆 برتر - ۵ سهام پرمعامله\n"
+        "📈 اختیار - اختیارهای خرید\n"
+        "📚 راهنما - این راهنما\n\n"
+        "⚠️ **توجه:** سیگنال‌ها فقط اطلاع‌رسانی هستند.",
+        reply_markup=main_menu()
     )
 
+# ===== اجرا =====
 if __name__ == "__main__":
     print("✅ ربات روشن شد!")
     while True:
