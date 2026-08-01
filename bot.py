@@ -1,6 +1,6 @@
 
 import telebot
-import time
+time time
 
 
 TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g1kEJNlsE" 
