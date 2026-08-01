@@ -1,6 +1,6 @@
 import telebot
 import requests
-import time
+import requests
 
 TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g"
 
