@@ -1,39 +1,178 @@
+# -*- coding: utf-8 -*-
 import telebot
+import requests
 import time
+import json
 
 TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g1kEJNlsE"
 
 bot = telebot.TeleBot(TOKEN)
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "✅ Bot is working!")
-
-@bot.message_handler(commands=['test'])
-def test(message):
-    bot.reply_to(message, "✅ Test successful!")
-
-@bot.message_handler(commands=['signals'])
-def signals(message):
-    bot.reply_to(message, "📊 Signal: FOLAD - 5000 Toman")
-
-@bot.message_handler(commands=['top'])
-def top(message):
-    bot.reply_to(message, "🏆 Top: 1. FOLAD 2. KHODRO 3. SHESTA")
-
-@bot.message_handler(commands=['option'])
-def option(message):
-    bot.reply_to(message, "📈 Option: FOLAD-AP-1401")
-
-@bot.message_handler(commands=['help'])
-def help(message):
-    bot.reply_to(message, "Commands: /start /signals /top /option /test")
-
-print("✅ Bot started!")
-
-while True:
+def get_market_data():
     try:
-        bot.infinity_polling()
+        # دریافت داده از سایت بورس
+        url = "http://cdn.tsetmc.com/api/ClosePrice/Market/GetAllClosingPrice/0"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Accept-Language": "fa-IR,fa;q=0.9"
+        }
+        response = requests.get(url, timeout=15, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"خطا: {response.status_code}")
+            return None
+            
+        data = response.json()
+        stocks = []
+        
+        for item in data['closingPrice']:
+            symbol = item['instrument']['lVal30']
+            price = item.get('pTitran', 0) / 10
+            volume = item.get('qTitran', 0)
+            change = item.get('pDrCotVal', 0)
+            
+            stocks.append({
+                'نماد': symbol,
+                'قیمت': price,
+                'حجم': volume,
+                'تغییر': change
+            })
+        
+        print(f"✅ دریافت {len(stocks)} سهم")
+        return stocks
+        
     except Exception as e:
-        print(f"Error: {e}")
-        time.sleep(5)
+        print(f"خطا: {e}")
+        return None
+
+def generate_signals(stocks):
+    signals = []
+    if not stocks:
+        return []
+    
+    for item in stocks:
+        try:
+            price = float(item.get('قیمت', 0))
+            volume = float(item.get('حجم', 0))
+            change = float(item.get('تغییر', 0))
+            symbol = str(item.get('نماد', ''))
+            
+            if volume > 5000000000 and change > 0 and price > 0:
+                is_option = 'AP' in symbol or 'اختیار' in symbol
+                signals.append({
+                    'نماد': symbol,
+                    'قیمت': price,
+                    'تغییر': change,
+                    'حجم': volume,
+                    'نوع': 'اختیار خرید' if is_option else 'سهام'
+                })
+        except:
+            continue
+    
+    signals = sorted(signals, key=lambda x: x['تغییر'], reverse=True)
+    return signals[:10]
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, 
+        "🤖 **ربات سیگنال بورس**\n\n"
+        "📊 دستورات:\n"
+        "/سيگنال - دریافت سیگنال‌های خرید\n"
+        "/برتر - نمایش ۵ سهام پرمعامله\n"
+        "/اختیار - نمایش اختیارهای خرید\n"
+        "/راهنما - راهنمای کامل"
+    )
+
+@bot.message_handler(commands=['سيگنال'])
+def get_signals(message):
+    msg = bot.reply_to(message, "🔄 در حال دریافت داده‌ها...")
+    
+    stocks = get_market_data()
+    if stocks is None:
+        bot.edit_message_text("❌ خطا در دریافت داده. لطفاً دوباره تلاش کنید.", msg.chat.id, msg.message_id)
+        return
+    
+    signals = generate_signals(stocks)
+    if not signals:
+        bot.edit_message_text("⛔ امروز سیگنال خرید خاصی یافت نشد.", msg.chat.id, msg.message_id)
+        return
+    
+    response = "📊 **سیگنال‌های خرید امروز:**\n\n"
+    for s in signals:
+        response += f"✅ {s['نماد']} ({s['نوع']})\n"
+        response += f"   قیمت: {s['قیمت']:,.0f} تومان\n"
+        response += f"   تغییر: {s['تغییر']:+,.2f}%\n"
+        response += f"   حجم: {s['حجم']:,.0f}\n\n"
+    
+    bot.edit_message_text(response, msg.chat.id, msg.message_id)
+
+@bot.message_handler(commands=['برتر'])
+def get_top(message):
+    msg = bot.reply_to(message, "🔄 در حال دریافت داده‌ها...")
+    
+    stocks = get_market_data()
+    if stocks is None:
+        bot.edit_message_text("❌ خطا در دریافت داده.", msg.chat.id, msg.message_id)
+        return
+    
+    try:
+        top = sorted(stocks, key=lambda x: x['حجم'], reverse=True)[:5]
+        response = "🏆 **۵ سهام پرمعامله امروز:**\n\n"
+        for item in top:
+            response += f"• {item['نماد']}\n"
+            response += f"  قیمت: {item['قیمت']:,.0f} تومان\n"
+            response += f"  حجم: {item['حجم']:,.0f}\n\n"
+        bot.edit_message_text(response, msg.chat.id, msg.message_id)
+    except Exception as e:
+        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id)
+
+@bot.message_handler(commands=['اختیار'])
+def get_options(message):
+    msg = bot.reply_to(message, "🔄 در حال جستجوی اختیارها...")
+    
+    stocks = get_market_data()
+    if stocks is None:
+        bot.edit_message_text("❌ خطا در دریافت داده.", msg.chat.id, msg.message_id)
+        return
+    
+    try:
+        options = [x for x in stocks if 'AP' in x['نماد'] or 'اختیار' in x['نماد']]
+        if not options:
+            bot.edit_message_text("⛔ امروز اختیار معامله‌ای یافت نشد.", msg.chat.id, msg.message_id)
+            return
+        
+        top_options = sorted(options, key=lambda x: x['حجم'], reverse=True)[:5]
+        response = "📈 **اختیارهای خرید امروز:**\n\n"
+        for item in top_options:
+            response += f"• {item['نماد']}\n"
+            response += f"  قیمت: {item['قیمت']:,.0f} تومان\n"
+            response += f"  تغییر: {item['تغییر']:+,.2f}%\n"
+            response += f"  حجم: {item['حجم']:,.0f}\n\n"
+        bot.edit_message_text(response, msg.chat.id, msg.message_id)
+    except Exception as e:
+        bot.edit_message_text(f"❌ خطا: {e}", msg.chat.id, msg.message_id)
+
+@bot.message_handler(commands=['راهنما'])
+def send_help(message):
+    bot.reply_to(message,
+        "📚 **راهنما:**\n\n"
+        "🔍 معیارهای سیگنال خرید:\n"
+        "• حجم معاملات بالای ۵ میلیارد تومان\n"
+        "• تغییر قیمت مثبت\n\n"
+        "📋 **دستورات:**\n"
+        "/سيگنال - دریافت سیگنال‌های خرید\n"
+        "/برتر - ۵ سهام پرمعامله\n"
+        "/اختیار - اختیارهای خرید\n"
+        "/راهنما - این راهنما\n\n"
+        "⚠️ **توجه:** سیگنال‌ها فقط اطلاع‌رسانی هستند."
+    )
+
+if __name__ == "__main__":
+    print("✅ ربات روشن شد!")
+    while True:
+        try:
+            bot.infinity_polling()
+        except Exception as e:
+            print(f"خطا: {e}")
+            time.sleep(5)
