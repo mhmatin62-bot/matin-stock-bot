@@ -1,8 +1,9 @@
-import requests
-import requests
-import requests
 
-TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g"
+import telebot
+import time
+
+
+TOKEN = "8949265474:AAF03uLgyIjxxqZdyYBSOLV4-5g1kEJNlsE" 
 
 bot = telebot.TeleBot(TOKEN)
 
